@@ -98,6 +98,7 @@ private slots:
   bool saveAs();
   void importMedia();
   void openCameraDevice();
+  void openScreenCapture();
   void addColor();
   void about();
   void updateStatusBar();
@@ -389,6 +390,7 @@ private:
   QAction *openAction;
   QAction *importMediaAction;
   QAction *AddCameraAction;
+  QAction *addScreenCaptureAction;
   QAction *addColorAction;
   QAction *saveAction;
   QAction *saveAsAction;

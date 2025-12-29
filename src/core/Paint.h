@@ -45,7 +45,8 @@ namespace mmp {
 typedef enum {
   VIDEO_URI,
   VIDEO_WEBCAM,
-  VIDEO_SHMSRC
+  VIDEO_SHMSRC,
+  VIDEO_SCREEN_PIPEWIRE
 } VideoType;
 
 /**

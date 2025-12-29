@@ -26,6 +26,7 @@
 #include "Commands.h"
 #include "ProjectWriter.h"
 #include "ProjectReader.h"
+#include "VideoScreenPipeWireImpl.h"
 #include <sstream>
 #include <string>
 
@@ -684,6 +685,65 @@ void MainWindow::openCameraDevice()
 #else
     QMessageBox::warning(this, tr("No camera available"), tr("You can not use this feature!\nNo camera available in your system"));
 #endif
+}
+
+void MainWindow::openScreenCapture()
+{
+  // Stop video playback, if it is playing, to avoid lags. XXX Hack
+  pause(!pauseAction->isVisible());
+
+  // Check if pipewiresrc is available
+  GstElementFactory *factory = gst_element_factory_find("pipewiresrc");
+  if (!factory)
+  {
+    QMessageBox::warning(this, tr("Screen capture not available"),
+                         tr("Screen capture requires PipeWire GStreamer plugin.\n"
+                            "Please install gst-plugin-pipewire."));
+    play(!pauseAction->isVisible());
+    return;
+  }
+  gst_object_unref(factory);
+
+  // Show information dialog about the portal
+  QMessageBox::information(this, tr("Screen Capture"),
+                          tr("Your desktop will show a dialog to select a screen or window.\n\n"
+                             "Click OK to start the selection process."));
+
+  // Create a temporary VideoScreenPipeWireImpl to request screen share
+  VideoScreenPipeWireImpl *screenCapture = new VideoScreenPipeWireImpl();
+
+  // Request screen share through portal (this will show the selection dialog)
+  if (!screenCapture->requestScreenShare())
+  {
+    QMessageBox::warning(this, tr("Screen capture failed"),
+                         tr("Failed to initialize screen capture.\n"
+                            "Check the terminal for error messages."));
+    delete screenCapture;
+    play(!pauseAction->isVisible());
+    return;
+  }
+
+  // If we got here, user selected a source successfully
+  int pipeWireNode = screenCapture->getPipeWireFd();
+  qDebug() << "Got PipeWire node:" << pipeWireNode;
+
+  // Restart video playback if it was previously playing. XXX Hack
+  play(!pauseAction->isVisible());
+
+  // Create screen capture paint with the PipeWire node
+  QString nodePath = QString::number(pipeWireNode);
+  uint mediaId = createMediaPaint(NULL_UID, nodePath, 0, 0, false, VIDEO_SCREEN_PIPEWIRE);
+
+  // Clean up temporary object (the paint has its own instance)
+  delete screenCapture;
+
+  // Initialize position (center)
+  QSharedPointer<Video> media = qSharedPointerCast<Video>(mappingManager->getPaintById(mediaId));
+  if (media)
+  {
+    media->setPosition((sourceCanvas->width() - media->getWidth()) / 2.0f,
+                       (sourceCanvas->height() - media->getHeight()) / 2.0f);
+  }
 }
 
 void MainWindow::addColor()
@@ -1738,6 +1798,16 @@ void MainWindow::createActions()
   addAction(AddCameraAction);
   connect(AddCameraAction, SIGNAL(triggered()), this, SLOT(openCameraDevice()));
 
+  // Capture screen.
+  addScreenCaptureAction = new QAction(tr("Capture &Screen..."), this);
+  addScreenCaptureAction->setShortcut(Qt::CTRL + Qt::SHIFT + Qt::Key_S);
+  addScreenCaptureAction->setIcon(QIcon(":/add-camera"));
+  addScreenCaptureAction->setIconVisibleInMenu(false);
+  addScreenCaptureAction->setToolTip(tr("Capture screen or window..."));
+  addScreenCaptureAction->setShortcutContext(Qt::ApplicationShortcut);
+  addAction(addScreenCaptureAction);
+  connect(addScreenCaptureAction, SIGNAL(triggered()), this, SLOT(openScreenCapture()));
+
   // Add color.
   addColorAction = new QAction(tr("Add &Color Source..."), this);
   addColorAction->setShortcut(Qt::CTRL + Qt::SHIFT + Qt::Key_A);
@@ -2241,6 +2311,7 @@ void MainWindow::createMenus()
   fileMenu->addSeparator();
   fileMenu->addAction(importMediaAction);
   fileMenu->addAction(AddCameraAction);
+  fileMenu->addAction(addScreenCaptureAction);
   fileMenu->addAction(addColorAction);
 
   // Recent file separator
@@ -2430,6 +2501,7 @@ void MainWindow::createToolBars()
   mainToolBar->setMovable(false);
   mainToolBar->addAction(importMediaAction);
   mainToolBar->addAction(AddCameraAction);
+  mainToolBar->addAction(addScreenCaptureAction);
   mainToolBar->addAction(addColorAction);
 
   mainToolBar->addSeparator();

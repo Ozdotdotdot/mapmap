@@ -4,6 +4,7 @@ QT += xml
 QT += core
 QT += network
 QT += multimedia
+QT += dbus
 
 greaterThan(QT_MAJOR_VERSION, 4) {
   QT -= gui # using widgets instead gui in Qt5

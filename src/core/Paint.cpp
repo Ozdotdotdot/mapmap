@@ -23,6 +23,7 @@
 #include "VideoUriDecodeBinImpl.h"
 #include "CameraImpl.h"
 #include "VideoShmSrcImpl.h"
+#include "VideoScreenPipeWireImpl.h"
 #include <iostream>
 
 namespace mmp {
@@ -210,6 +211,9 @@ Video::Video(const QString uri_, VideoType type, double rate, uid id):
       break;
     case VIDEO_SHMSRC:
       _impl = new VideoShmSrcImpl();
+      break;
+    case VIDEO_SCREEN_PIPEWIRE:
+      _impl = new VideoScreenPipeWireImpl();
       break;
   }
   setRate(rate);

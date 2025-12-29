@@ -1231,6 +1231,8 @@ uid MainWindow::createMediaPaint(uid paintId, QString uri, float x, float y,
 
     if (type == VIDEO_WEBCAM) {
       paint->setName(tex->getCameraNameFromUri(uri));
+    } else if (type == VIDEO_SCREEN_PIPEWIRE) {
+      paint->setName(tr("Screen Capture"));
     } else {
       paint->setName(strippedName(uri));
     }

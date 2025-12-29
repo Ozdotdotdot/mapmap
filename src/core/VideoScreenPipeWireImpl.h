@@ -49,7 +49,7 @@ public:
   int getPipeWireFd() const { return _pipeWireFd; }
 
 private slots:
-  void onPortalResponse(uint response, const QVariantMap &results);
+  void onPortalResponseRaw();
 
 private:
   GstElement *_pipewiresrc0;
@@ -57,6 +57,7 @@ private:
   int _pipeWireFd;
   bool _sessionReady;
   QEventLoop *_eventLoop;
+  bool _waitingForStart;  // Track if we're waiting for Start response
 
   // Portal helpers
   bool createSession();

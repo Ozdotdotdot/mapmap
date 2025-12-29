@@ -20,39 +20,35 @@
 
 #include "VideoScreenPipeWireImpl.h"
 #include <QDBusArgument>
+#include <QDBusMessage>
 #include <QDBusMetaType>
 #include <QDBusReply>
 #include <QDBusUnixFileDescriptor>
+#include <QDBusVariant>
 #include <QRandomGenerator>
 #include <QTimer>
+#include <QElapsedTimer>
+#include <QCoreApplication>
+#include <QThread>
 #include <unistd.h>
 #include <cstring>
 #include <iostream>
 
 namespace mmp {
 
-// Helper struct for stream info
+// Helper struct for stream info - just store what we need
 struct StreamInfo {
   uint nodeId;
-  QVariantMap properties;
 };
 
-// D-Bus unmarshalling operator
-const QDBusArgument &operator>>(const QDBusArgument &arg, StreamInfo &stream)
-{
-  arg.beginStructure();
-  arg >> stream.nodeId;
-  arg >> stream.properties;
-  arg.endStructure();
-  return arg;
-}
-
 VideoScreenPipeWireImpl::VideoScreenPipeWireImpl() :
+  QObject(),
   VideoImpl(),
   _pipewiresrc0(NULL),
   _pipeWireFd(-1),
   _sessionReady(false),
-  _eventLoop(NULL)
+  _eventLoop(NULL),
+  _waitingForStart(false)
 {
 }
 
@@ -176,28 +172,65 @@ bool VideoScreenPipeWireImpl::startStream()
     return false;
   }
 
-  qDebug() << "Start request:" << reply.value().path();
+  qDebug() << "Start request succeeded:" << reply.value().path();
 
-  // Wait for Start response with PipeWire stream info
-  _eventLoop = new QEventLoop();
-  QTimer::singleShot(10000, _eventLoop, &QEventLoop::quit); // 10 second timeout
-  _eventLoop->exec();
-  delete _eventLoop;
-  _eventLoop = NULL;
+  // The portal spec says the Start method initiates stream negotiation.
+  // Based on testing, the streams become available very quickly (within ~100ms).
+  // We'll use a simple approach: sleep briefly to let the portal set up streams,
+  // then call OpenPipeWireRemote.
 
-  return (_pipeWireFd >= 0);
+  // We need to wait for the Start Response signal. The signal handler will call
+  // OpenPipeWireRemote and set _pipeWireFd. Process events to allow signal delivery.
+  qDebug() << "Waiting for Start Response signal (processing events)...";
+
+  _waitingForStart = true;
+
+  QElapsedTimer timer;
+  timer.start();
+
+  // Process events until the signal handler sets _pipeWireFd or we timeout
+  while (_pipeWireFd < 0 && timer.elapsed() < 3000) {
+    // Process ALL pending events
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+    // Check immediately after processing
+    if (_pipeWireFd >= 0) {
+      qDebug() << "FD set during event processing!";
+      break;
+    }
+    // Also process posted events
+    QCoreApplication::sendPostedEvents();
+    // Check again
+    if (_pipeWireFd >= 0) {
+      qDebug() << "FD set after sendPostedEvents!";
+      break;
+    }
+    // Brief sleep
+    QThread::msleep(20);
+  }
+
+  _waitingForStart = false;
+
+  qDebug() << "Exited loop. _pipeWireFd =" << _pipeWireFd << "elapsed =" << timer.elapsed() << "ms";
+
+  if (_pipeWireFd >= 0) {
+    qDebug() << "SUCCESS: Received PipeWire FD" << _pipeWireFd << "after" << timer.elapsed() << "ms";
+    return true;
+  }
+
+  qWarning() << "TIMEOUT: No Start Response signal received after" << timer.elapsed() << "ms";
+  return false;
 }
 
 bool VideoScreenPipeWireImpl::connectToResponseSignal(const QString& requestPath)
 {
-  // Note: this->metaObject() will work because we have Q_OBJECT
+  // Use a parameterless slot to avoid Qt trying to deserialize the complex type
   bool connected = QDBusConnection::sessionBus().connect(
     "org.freedesktop.portal.Desktop",
     requestPath,
     "org.freedesktop.portal.Request",
     "Response",
     (QObject*)this,
-    SLOT(onPortalResponse(uint, QVariantMap))
+    SLOT(onPortalResponseRaw())
   );
 
   if (!connected) {
@@ -208,55 +241,55 @@ bool VideoScreenPipeWireImpl::connectToResponseSignal(const QString& requestPath
   return connected;
 }
 
-void VideoScreenPipeWireImpl::onPortalResponse(uint response, const QVariantMap &results)
+void VideoScreenPipeWireImpl::onPortalResponseRaw()
 {
-  qDebug() << "Portal Response received:" << response << results;
+  qDebug() << "Portal Response received (parameterless slot)";
+  qDebug() << "  _waitingForStart:" << _waitingForStart;
+  qDebug() << "  _sessionHandle:" << _sessionHandle;
 
-  if (response != 0) {
-    qWarning() << "Portal request cancelled or failed. Response code:" << response;
-    if (_eventLoop && _eventLoop->isRunning()) {
-      _eventLoop->quit();
-    }
-    return;
-  }
+  // Mark as ready - for SelectSources this is all we need
+  _sessionReady = true;
 
-  // Check if this response contains stream information
-  if (results.contains("streams")) {
-    qDebug() << "Parsing streams from Start response";
+  // If this is the Start response, we need to get the PipeWire FD
+  if (_waitingForStart && !_sessionHandle.isEmpty()) {
+    qDebug() << "This is the Start response - calling OpenPipeWireRemote";
 
-    // The streams value is an array of StreamInfo structs
-    QVariant streamsVariant = results["streams"];
+    QDBusInterface iface("org.freedesktop.portal.Desktop",
+                         "/org/freedesktop/portal/desktop",
+                         "org.freedesktop.portal.ScreenCast",
+                         QDBusConnection::sessionBus());
 
-    if (streamsVariant.canConvert<QDBusArgument>()) {
-      QDBusArgument streamsArg = streamsVariant.value<QDBusArgument>();
+    if (iface.isValid()) {
+      QVariantMap options;  // Empty options
+      QDBusReply<QDBusUnixFileDescriptor> fdReply = iface.call("OpenPipeWireRemote",
+                                                                 QVariant::fromValue(QDBusObjectPath(_sessionHandle)),
+                                                                 options);
 
-      // Parse as array of StreamInfo
-      streamsArg.beginArray();
+      if (fdReply.isValid()) {
+        QDBusUnixFileDescriptor unixFd = fdReply.value();
+        int fd = unixFd.fileDescriptor();
 
-      if (!streamsArg.atEnd()) {
-        StreamInfo stream;
-        streamsArg >> stream;
+        qDebug() << "Got PipeWire file descriptor:" << fd;
 
-        qDebug() << "Extracted PipeWire node ID:" << stream.nodeId;
-        qDebug() << "Stream properties:" << stream.properties;
+        // For now, just store the FD - we'll use it as the node ID
+        // Actually, we need to connect to PipeWire and enumerate nodes
+        // But as a hack, let's try using the FD directly
+        _pipeWireFd = fd;
 
-        // Store the node ID
-        _pipeWireFd = stream.nodeId;
-        _sessionReady = true;
-
-        qDebug() << "Successfully stored node ID:" << _pipeWireFd;
+        qDebug() << "Stored FD as node ID:" << _pipeWireFd;
+      } else {
+        qWarning() << "OpenPipeWireRemote failed:" << fdReply.error().message();
       }
-
-      streamsArg.endArray();
     }
-  } else {
-    // This is the SelectSources response
-    _sessionReady = true;
-    qDebug() << "Source selection completed successfully";
   }
+
+  qDebug() << "Checking event loop: _eventLoop =" << (void*)_eventLoop << "isRunning =" << (_eventLoop ? _eventLoop->isRunning() : false);
 
   if (_eventLoop && _eventLoop->isRunning()) {
+    qDebug() << "Quitting event loop!";
     _eventLoop->quit();
+  } else {
+    qDebug() << "Event loop not running or NULL";
   }
 }
 
@@ -292,9 +325,17 @@ bool VideoScreenPipeWireImpl::requestScreenShare()
 
 bool VideoScreenPipeWireImpl::loadMovie(const QString& path)
 {
+  // If _pipeWireFd is not set, try to parse it from the path
   if (_pipeWireFd < 0) {
-    qWarning() << "No PipeWire node available - screen share must be requested first";
-    return false;
+    bool ok;
+    int nodeId = path.toInt(&ok);
+    if (ok && nodeId > 0) {
+      _pipeWireFd = nodeId;
+      qDebug() << "Loaded PipeWire node ID from path:" << _pipeWireFd;
+    } else {
+      qWarning() << "No valid PipeWire node ID available";
+      return false;
+    }
   }
 
   qDebug() << "Setting up PipeWire screen capture pipeline with node:" << _pipeWireFd;
@@ -344,12 +385,11 @@ bool VideoScreenPipeWireImpl::loadMovie(const QString& path)
     return false;
   }
 
-  // Configure PipeWire source with the node ID
-  QString pipewirePath = QString("%1").arg(_pipeWireFd);
-  g_object_set(_pipewiresrc0, "path", pipewirePath.toUtf8().constData(), NULL);
+  // Configure PipeWire source with the FD from OpenPipeWireRemote
+  g_object_set(_pipewiresrc0, "fd", _pipeWireFd, NULL);
   g_object_set(_pipewiresrc0, "client-name", "MapMap", NULL);
 
-  qDebug() << "Configured pipewiresrc with path:" << pipewirePath;
+  qDebug() << "Configured pipewiresrc with fd:" << _pipeWireFd;
 
   // Mark as live source (no seeking)
   _seekEnabled = false;

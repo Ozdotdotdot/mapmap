@@ -31,6 +31,22 @@
 
 namespace mmp {
 
+// Helper struct for stream info
+struct StreamInfo {
+  uint nodeId;
+  QVariantMap properties;
+};
+
+// D-Bus unmarshalling operator
+const QDBusArgument &operator>>(const QDBusArgument &arg, StreamInfo &stream)
+{
+  arg.beginStructure();
+  arg >> stream.nodeId;
+  arg >> stream.properties;
+  arg.endStructure();
+  return arg;
+}
+
 VideoScreenPipeWireImpl::VideoScreenPipeWireImpl() :
   VideoImpl(),
   _pipewiresrc0(NULL),
@@ -206,26 +222,33 @@ void VideoScreenPipeWireImpl::onPortalResponse(uint response, const QVariantMap 
 
   // Check if this response contains stream information
   if (results.contains("streams")) {
-    QDBusArgument streamsArg = results["streams"].value<QDBusArgument>();
-    streamsArg.beginArray();
+    qDebug() << "Parsing streams from Start response";
 
-    while (!streamsArg.atEnd()) {
-      streamsArg.beginStructure();
-      uint nodeId;
-      QVariantMap streamProperties;
-      streamsArg >> nodeId >> streamProperties;
-      streamsArg.endStructure();
+    // The streams value is an array of StreamInfo structs
+    QVariant streamsVariant = results["streams"];
 
-      qDebug() << "PipeWire node ID:" << nodeId;
-      qDebug() << "Stream properties:" << streamProperties;
+    if (streamsVariant.canConvert<QDBusArgument>()) {
+      QDBusArgument streamsArg = streamsVariant.value<QDBusArgument>();
 
-      // Store the node ID for pipewiresrc
-      _pipeWireFd = nodeId; // Actually this is the node ID, not FD
-      _sessionReady = true;
-      break; // Use first stream
+      // Parse as array of StreamInfo
+      streamsArg.beginArray();
+
+      if (!streamsArg.atEnd()) {
+        StreamInfo stream;
+        streamsArg >> stream;
+
+        qDebug() << "Extracted PipeWire node ID:" << stream.nodeId;
+        qDebug() << "Stream properties:" << stream.properties;
+
+        // Store the node ID
+        _pipeWireFd = stream.nodeId;
+        _sessionReady = true;
+
+        qDebug() << "Successfully stored node ID:" << _pipeWireFd;
+      }
+
+      streamsArg.endArray();
     }
-
-    streamsArg.endArray();
   } else {
     // This is the SelectSources response
     _sessionReady = true;

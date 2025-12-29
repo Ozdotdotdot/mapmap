@@ -174,51 +174,17 @@ bool VideoScreenPipeWireImpl::startStream()
 
   qDebug() << "Start request succeeded:" << reply.value().path();
 
-  // The portal spec says the Start method initiates stream negotiation.
-  // Based on testing, the streams become available very quickly (within ~100ms).
-  // We'll use a simple approach: sleep briefly to let the portal set up streams,
-  // then call OpenPipeWireRemote.
-
-  // We need to wait for the Start Response signal. The signal handler will call
-  // OpenPipeWireRemote and set _pipeWireFd. Process events to allow signal delivery.
-  qDebug() << "Waiting for Start Response signal (processing events)...";
-
+  // Set flag so the Response handler knows to call OpenPipeWireRemote
   _waitingForStart = true;
 
-  QElapsedTimer timer;
-  timer.start();
+  // The Response signal will arrive asynchronously and the handler will:
+  // 1. Call OpenPipeWireRemote
+  // 2. Set _pipeWireFd
+  // 3. Quit any waiting event loop
 
-  // Process events until the signal handler sets _pipeWireFd or we timeout
-  while (_pipeWireFd < 0 && timer.elapsed() < 3000) {
-    // Process ALL pending events
-    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
-    // Check immediately after processing
-    if (_pipeWireFd >= 0) {
-      qDebug() << "FD set during event processing!";
-      break;
-    }
-    // Also process posted events
-    QCoreApplication::sendPostedEvents();
-    // Check again
-    if (_pipeWireFd >= 0) {
-      qDebug() << "FD set after sendPostedEvents!";
-      break;
-    }
-    // Brief sleep
-    QThread::msleep(20);
-  }
-
-  _waitingForStart = false;
-
-  qDebug() << "Exited loop. _pipeWireFd =" << _pipeWireFd << "elapsed =" << timer.elapsed() << "ms";
-
-  if (_pipeWireFd >= 0) {
-    qDebug() << "SUCCESS: Received PipeWire FD" << _pipeWireFd << "after" << timer.elapsed() << "ms";
-    return true;
-  }
-
-  qWarning() << "TIMEOUT: No Start Response signal received after" << timer.elapsed() << "ms";
-  return false;
+  // For now, just return true - the FD will be set asynchronously
+  qDebug() << "Start initiated - FD will be set when Response arrives";
+  return true;
 }
 
 bool VideoScreenPipeWireImpl::connectToResponseSignal(const QString& requestPath)
@@ -270,6 +236,7 @@ void VideoScreenPipeWireImpl::onPortalResponseRaw()
         int fd = unixFd.fileDescriptor();
 
         qDebug() << "Got PipeWire file descriptor:" << fd;
+        qDebug() << "Handler: this =" << (void*)this << "&_pipeWireFd =" << (void*)&_pipeWireFd << "before assignment =" << _pipeWireFd;
 
         // For now, just store the FD - we'll use it as the node ID
         // Actually, we need to connect to PipeWire and enumerate nodes
@@ -277,6 +244,7 @@ void VideoScreenPipeWireImpl::onPortalResponseRaw()
         _pipeWireFd = fd;
 
         qDebug() << "Stored FD as node ID:" << _pipeWireFd;
+        qDebug() << "Handler: _pipeWireFd after assignment =" << _pipeWireFd << "reading again:" << _pipeWireFd;
       } else {
         qWarning() << "OpenPipeWireRemote failed:" << fdReply.error().message();
       }
@@ -311,14 +279,54 @@ bool VideoScreenPipeWireImpl::requestScreenShare()
   }
   qDebug() << "SUCCESS: Sources selected";
 
+  // Call startStream() which initiates the Start request but returns immediately
   if (!startStream()) {
-    qWarning() << "FAILED: Could not start stream";
+    qWarning() << "FAILED: Could not initiate stream start";
     return false;
   }
-  qDebug() << "SUCCESS: Stream started";
+  qDebug() << "Start request initiated, waiting for Response signal...";
+
+  // Give the event loop a chance to deliver any pending signals
+  QCoreApplication::processEvents();
+
+  // Now wait for the Start Response signal to arrive and set _pipeWireFd
+  // We're no longer in a nested signal handler, so D-Bus signals should be delivered
+  QElapsedTimer timer;
+  timer.start();
+
+  qDebug() << "Waiting for Start Response to set _pipeWireFd...";
+  qDebug() << "Loop: this =" << (void*)this << "&_pipeWireFd =" << (void*)&_pipeWireFd;
+  qDebug() << "Initial _pipeWireFd value:" << _pipeWireFd;
+
+  // Wait up to 10 seconds for the async Response
+  int iterations = 0;
+  while (timer.elapsed() < 10000) {
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 100);
+
+    // Read the value AFTER processing events
+    volatile int currentFd = _pipeWireFd;
+
+    if (currentFd >= 0) {
+      qDebug() << "FD is now set to" << currentFd << "- breaking loop";
+      break;
+    }
+
+    QThread::msleep(50);
+    iterations++;
+    if (iterations % 10 == 0) {
+      qDebug() << "Loop iteration" << iterations << "_pipeWireFd =" << currentFd << "elapsed =" << timer.elapsed();
+    }
+  }
+
+  qDebug() << "Exited loop after" << iterations << "iterations, _pipeWireFd =" << _pipeWireFd;
+
+  if (_pipeWireFd < 0) {
+    qWarning() << "TIMEOUT: Start Response did not arrive after" << timer.elapsed() << "ms";
+    return false;
+  }
 
   qDebug() << "========================================";
-  qDebug() << "Screen share completed! PipeWire node:" << _pipeWireFd;
+  qDebug() << "SUCCESS: Got PipeWire FD" << _pipeWireFd << "after" << timer.elapsed() << "ms";
   qDebug() << "========================================";
   return true;
 }

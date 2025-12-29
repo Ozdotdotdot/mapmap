@@ -54,10 +54,10 @@ private slots:
 private:
   GstElement *_pipewiresrc0;
   QString _sessionHandle;
-  int _pipeWireFd;
+  volatile int _pipeWireFd;  // Volatile: modified by signal handler, checked in loop
   bool _sessionReady;
   QEventLoop *_eventLoop;
-  bool _waitingForStart;  // Track if we're waiting for Start response
+  volatile bool _waitingForStart;  // Volatile: modified by signal handler, checked in loop
 
   // Portal helpers
   bool createSession();
@@ -66,6 +66,15 @@ private:
 
   // D-Bus signal connection
   bool connectToResponseSignal(const QString& requestPath);
+
+  // State tracking for async flow
+  enum class PortalState {
+    Idle,
+    SessionCreated,
+    SourcesSelected,
+    StreamStarted
+  };
+  PortalState _portalState;
 };
 
 }

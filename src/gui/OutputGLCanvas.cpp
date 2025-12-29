@@ -24,7 +24,7 @@
 
 namespace mmp {
 
-OutputGLCanvas::OutputGLCanvas(MainWindow* mainWindow, QWidget* parent, const QGLWidget* shareWidget, QGraphicsScene* scene)
+OutputGLCanvas::OutputGLCanvas(MainWindow* mainWindow, QWidget* parent, const QOpenGLWidget* shareWidget, QGraphicsScene* scene)
 : MapperGLCanvas(mainWindow, true, parent, shareWidget, scene),
   _displayCrosshair(false),
   _displayTestSignal(false),

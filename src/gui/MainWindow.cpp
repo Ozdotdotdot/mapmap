@@ -724,7 +724,7 @@ void MainWindow::openScreenCapture()
   }
 
   // If we got here, user selected a source successfully
-  int pipeWireNode = screenCapture->getPipeWireFd();
+  uint pipeWireNode = screenCapture->getPipeWireNodeId();
   qDebug() << "Got PipeWire node:" << pipeWireNode;
 
   // Restart video playback if it was previously playing. XXX Hack
@@ -1622,7 +1622,7 @@ void MainWindow::createLayout()
   sourceLayout->addWidget(sourceCanvasToolbar, 0, Qt::AlignRight);
   sourcePanel->setLayout(sourceLayout);
 
-  destinationCanvas = new MapperGLCanvas(this, true, nullptr, static_cast<QGLWidget*>(sourceCanvas->viewport()));
+  destinationCanvas = new MapperGLCanvas(this, true, nullptr, static_cast<QOpenGLWidget*>(sourceCanvas->viewport()));
   destinationCanvas->setFocusPolicy(Qt::ClickFocus);
   destinationCanvas->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
   destinationCanvas->setMinimumSize(CANVAS_MINIMUM_WIDTH, CANVAS_MINIMUM_HEIGHT);

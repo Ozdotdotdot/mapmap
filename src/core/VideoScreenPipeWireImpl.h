@@ -46,18 +46,18 @@ public:
 
   // Check if portal session is ready
   bool isSessionReady() const { return _sessionReady; }
-  int getPipeWireFd() const { return _pipeWireFd; }
+  uint getPipeWireNodeId() const { return _pipeWireNodeId; }
 
 private slots:
-  void onPortalResponseRaw();
+  void onPortalResponse(uint response, const QVariantMap& results);
 
 private:
   GstElement *_pipewiresrc0;
   QString _sessionHandle;
-  volatile int _pipeWireFd;  // Volatile: modified by signal handler, checked in loop
+  uint _pipeWireNodeId;  // PipeWire node ID from portal streams
   bool _sessionReady;
   QEventLoop *_eventLoop;
-  volatile bool _waitingForStart;  // Volatile: modified by signal handler, checked in loop
+  bool _waitingForStart;  // Track if we're waiting for Start response
 
   // Portal helpers
   bool createSession();

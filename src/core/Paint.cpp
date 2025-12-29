@@ -24,6 +24,7 @@
 #include "CameraImpl.h"
 #include "VideoShmSrcImpl.h"
 #include "VideoScreenPipeWireImpl.h"
+#include <QOpenGLWidget>
 #include <iostream>
 
 namespace mmp {
@@ -110,7 +111,7 @@ void Image::build()
   _images.clear();
   for (int i=0; i<reader.imageCount(); i++)
     _images.push_back(
-        QGLWidget::convertToGLFormat(reader.read())
+        reader.read().convertToFormat(QImage::Format_ARGB32).rgbSwapped()
           .mirrored(true, false)
           .transformed(QTransform().rotate(180))
       );

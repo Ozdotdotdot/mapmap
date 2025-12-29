@@ -71,7 +71,21 @@ QMAKE_EXTRA_TARGETS += tarball
 
 # Show various messages
 message("MapMap version: $${VERSION}")
-# message("Qt version: $$[QT_VERSION]")
+message("Qt version: $$[QT_VERSION]")
+
+# Qt version checks (placed here so QT_VERSION is available)
+greaterThan(QT_MAJOR_VERSION, 4): greaterThan(QT_MINOR_VERSION, 3) {
+  message("Qt 5.4+ detected - QOpenGLWidget (Wayland) support enabled")
+} else:greaterThan(QT_MAJOR_VERSION, 5) {
+  message("Qt 6+ detected - QOpenGLWidget (Wayland) support enabled")
+} else {
+  error("MapMap requires Qt 5.4 or later for proper Wayland support via QOpenGLWidget. Found: $$[QT_VERSION]")
+}
+
+greaterThan(QT_MAJOR_VERSION, 4): lessThan(QT_MINOR_VERSION, 15) {
+  warning("Qt 5.15+ is recommended for best Wayland support. Current version: $$[QT_VERSION]")
+}
+
 # message("LIBS: $${LIBS}")
 # message("PKGCONFIG: $${PKGCONFIG}")
 # message("The project contains the following files: $${SOURCES} $${HEADERS}}")

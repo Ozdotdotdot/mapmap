@@ -28,7 +28,7 @@
 namespace mmp {
 
 MapperGLCanvas::MapperGLCanvas(MainWindow* mainWindow,
-                               bool isOutput, QWidget* parent, const QGLWidget * shareWidget,
+                               bool isOutput, QWidget* parent, const QOpenGLWidget* shareWidget,
                                QGraphicsScene* scene)
   : QGraphicsView(parent),
     _mainWindow(mainWindow),
@@ -66,8 +66,13 @@ MapperGLCanvas::MapperGLCanvas(MainWindow* mainWindow,
   resetTransform();
   // setAcceptDrops(true);
 
-  // Render with OpenGL.
-  setViewport(new QGLWidget(QGLFormat(QGL::SampleBuffers), this, shareWidget));
+  // Render with OpenGL using modern QOpenGLWidget (Qt 5.4+, Wayland-compatible)
+  QOpenGLWidget* glWidget = new QOpenGLWidget(this);
+  if (shareWidget) {
+    // Share OpenGL context with another widget
+    glWidget->setFormat(shareWidget->format());
+  }
+  setViewport(glWidget);
   setViewportUpdateMode(QGraphicsView::FullViewportUpdate);
 
   // TODO: do we need to delete scene (or call new QGraphicsScene(this)?)

@@ -23,9 +23,32 @@ unix:!macx {
   DEFINES += UNIX
   CONFIG += link_pkgconfig
   INCLUDE_PATH +=
+
+  # Core dependencies (required)
   PKGCONFIG += \
     gstreamer-1.0 gstreamer-base-1.0 gstreamer-app-1.0 gstreamer-pbutils-1.0 \
-    gl x11
+    gl
+
+  # X11 support (optional, for legacy compatibility)
+  # Qt automatically uses Wayland when QT_QPA_PLATFORM=wayland
+  # To build with X11 support: qmake CONFIG+=x11
+  CONFIG(x11) {
+    PKGCONFIG += x11
+    DEFINES += HAVE_X11
+    message("Building with X11 support")
+  } else {
+    message("Building without X11 (Wayland-native)")
+  }
+
+  # PipeWire support for screen capture (Wayland + modern X11)
+  packagesExist(libpipewire-0.3) {
+    PKGCONFIG += libpipewire-0.3
+    DEFINES += HAVE_PIPEWIRE
+    message("PipeWire support enabled")
+  } else {
+    warning("PipeWire not found - screen capture may not work on Wayland")
+  }
+
   QMAKE_CXXFLAGS_WARN_ON += -Wno-unused-result -Wno-unused-parameter \
                             -Wno-unused-variable -Wno-switch -Wno-comment \
                             -Wno-unused-but-set-variable

@@ -41,7 +41,7 @@
 #include "CameraSurface.h"
 
 #include <QVideoSurfaceFormat>
-#include <QGLWidget>
+#include <QOpenGLWidget>
 #include <QDebug>
 
 namespace mmp {
@@ -93,10 +93,10 @@ bool CameraSurface::present(const QVideoFrame &frame)
     }
 
 #ifdef Q_OS_WIN
-    _temporaryImage = QGLWidget::convertToGLFormat(_temporaryImage);
+    _temporaryImage = _temporaryImage.convertToFormat(QImage::Format_ARGB32).rgbSwapped();
 #else
-    // Convert to OpenGLformat and apply transforms to straighten.
-    _temporaryImage = QGLWidget::convertToGLFormat(_temporaryImage)
+    // Convert to OpenGL format and apply transforms to straighten.
+    _temporaryImage = _temporaryImage.convertToFormat(QImage::Format_ARGB32).rgbSwapped()
                       .mirrored(true, false)
                       .transformed(QTransform().rotate(180));
 #endif

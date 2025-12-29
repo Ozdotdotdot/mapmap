@@ -9,6 +9,8 @@
 #include <QCommandLineParser>
 #include <QCommandLineOption>
 #endif
+#include <QOpenGLContext>
+#include <QSurfaceFormat>
 #include "MM.h"
 #include "MainWindow.h"
 #include "MainApplication.h"
@@ -170,11 +172,20 @@ int main(int argc, char *argv[])
 
 #endif // USING_QT_5
 
-  if (! QGLFormat::hasOpenGL())
+  // Check for OpenGL support using modern Qt OpenGL API (Wayland-compatible)
+  if (!QOpenGLContext::openGLModuleType())
   {
     qFatal("This system has no OpenGL support.");
     return 1;
   }
+
+  // Set default OpenGL surface format for best compatibility
+  QSurfaceFormat format;
+  format.setDepthBufferSize(24);
+  format.setStencilBufferSize(8);
+  format.setVersion(2, 0);  // OpenGL 2.0 minimum
+  format.setProfile(QSurfaceFormat::CompatibilityProfile);
+  QSurfaceFormat::setDefaultFormat(format);
 
   // Create splash screen.
   QPixmap pixmap(":/mapmap-splash");

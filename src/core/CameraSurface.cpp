@@ -92,14 +92,11 @@ bool CameraSurface::present(const QVideoFrame &frame)
       currentFrame.unmap();
     }
 
-#ifdef Q_OS_WIN
-    _temporaryImage = _temporaryImage.convertToFormat(QImage::Format_ARGB32).rgbSwapped();
-#else
-    // Convert to OpenGL format and apply transforms to straighten.
-    _temporaryImage = _temporaryImage.convertToFormat(QImage::Format_ARGB32).rgbSwapped()
-                      .mirrored(true, false)
-                      .transformed(QTransform().rotate(180));
-#endif
+    // Convert to OpenGL-compatible format
+    // With QOpenGLWidget, we only need RGB swapping - no geometric transformations
+    // OpenGL textures will be rendered with correct orientation via texture coordinates
+    _temporaryImage = _temporaryImage.convertToFormat(QImage::Format_ARGB32)
+                      .rgbSwapped();
 
     return true;
   }

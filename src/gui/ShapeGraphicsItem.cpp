@@ -205,14 +205,25 @@ void EllipseColorGraphicsItem::_doPaint(QPainter* painter,
 
 TextureGraphicsItem::TextureGraphicsItem(Mapping::ptr mapping, bool output)
   : ShapeGraphicsItem(mapping, output),
-    _allocatedTextureWidth(0),
-    _allocatedTextureHeight(0)
+    _contextStates()
 {
   _textureMapping = qSharedPointerCast<TextureMapping>(mapping);
   Q_CHECK_PTR(_textureMapping);
 
   _inputShape = qSharedPointerCast<MShape>(_textureMapping.toStrongRef()->getInputShape());
   Q_CHECK_PTR(_inputShape);
+}
+
+TextureGraphicsItem::TextureContextState& TextureGraphicsItem::_stateForCurrentContext()
+{
+  QOpenGLContext* context = QOpenGLContext::currentContext();
+  static TextureContextState nullState;
+  if (!context)
+  {
+    return nullState;
+  }
+
+  return _contextStates[context];
 }
 
 void TextureGraphicsItem::_doPaint(QPainter *painter,
@@ -274,7 +285,27 @@ void TextureGraphicsItem::_prePaint(QPainter* painter,
 
   // Get texture.
   glEnable (GL_TEXTURE_2D);
-  glBindTexture(GL_TEXTURE_2D, texture->getTextureId());
+
+  // Ensure we have a valid GL context and a per-context texture id.
+  QOpenGLContext* currentContext = QOpenGLContext::currentContext();
+  if (!currentContext)
+  {
+    painter->endNativePainting();
+    return;
+  }
+
+  TextureContextState& contextState = _stateForCurrentContext();
+
+  // If the texture id is not valid in this context, allocate a fresh one and
+  // reset the cached dimensions so the first upload actually pushes pixels.
+  if (contextState.textureId == 0 || !glIsTexture(contextState.textureId))
+  {
+    glGenTextures(1, &contextState.textureId);
+    contextState.allocatedWidth = 0;
+    contextState.allocatedHeight = 0;
+  }
+
+  glBindTexture(GL_TEXTURE_2D, contextState.textureId);
 
   // Copy bits to texture iff necessary.
   // Strategy: Copy data while holding mutex, then upload after releasing mutex
@@ -283,7 +314,12 @@ void TextureGraphicsItem::_prePaint(QPainter* painter,
   bool needsUpload = false;
 
   texture->lockMutex();
-  if (texture->bitsHaveChanged())
+
+  // CRITICAL: For the first frame in a new context, we need to upload even if
+  // bitsHaveChanged() is false, because the texture was just created in this context
+  bool isFirstUploadInContext = (contextState.allocatedWidth == 0 && contextState.allocatedHeight == 0);
+
+  if (texture->bitsHaveChanged() || isFirstUploadInContext)
   {
     width = texture->getWidth();
     height = texture->getHeight();
@@ -321,7 +357,7 @@ void TextureGraphicsItem::_prePaint(QPainter* painter,
     const uchar* dataToCopy = reinterpret_cast<const uchar*>(_textureDataCopy.constData());
 
     // Check if texture dimensions have changed - if so, reallocate with glTexImage2D
-    if (width != _allocatedTextureWidth || height != _allocatedTextureHeight)
+    if (width != contextState.allocatedWidth || height != contextState.allocatedHeight)
     {
       // Allocate new texture memory (first time or dimension change)
       glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
@@ -329,8 +365,8 @@ void TextureGraphicsItem::_prePaint(QPainter* painter,
                    GL_UNSIGNED_BYTE, dataToCopy);
 
       // Remember allocated dimensions
-      _allocatedTextureWidth = width;
-      _allocatedTextureHeight = height;
+      contextState.allocatedWidth = width;
+      contextState.allocatedHeight = height;
     }
     else
     {

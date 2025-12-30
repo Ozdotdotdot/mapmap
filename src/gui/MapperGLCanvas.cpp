@@ -70,7 +70,19 @@ MapperGLCanvas::MapperGLCanvas(MainWindow* mainWindow,
   QOpenGLWidget* glWidget = new QOpenGLWidget(this);
   if (shareWidget) {
     // Share OpenGL context with another widget
-    glWidget->setFormat(shareWidget->format());
+    // This is critical for the output window to access textures uploaded in the main editor
+    QSurfaceFormat format = shareWidget->format();
+    glWidget->setFormat(format);
+
+    // Qt 5.4+ QOpenGLWidget approach: contexts are automatically shared within
+    // the same QApplication if they're compatible. However, each QOpenGLWidget
+    // creates its own FBO. The key is that they share the same QGraphicsScene,
+    // and we need to ensure textures are uploaded in a shared context.
+    //
+    // Note: Unlike the old QGLWidget::setContext(), QOpenGLWidget handles context
+    // sharing differently. As long as both widgets use compatible formats and belong
+    // to the same application, texture sharing should work automatically through Qt's
+    // internal context sharing groups.
   }
   setViewport(glWidget);
   setViewportUpdateMode(QGraphicsView::FullViewportUpdate);

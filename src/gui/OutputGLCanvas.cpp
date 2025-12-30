@@ -39,7 +39,19 @@ OutputGLCanvas::OutputGLCanvas(MainWindow* mainWindow, QWidget* parent, const QO
 
 void OutputGLCanvas::setSceneRectToViewportGeometry()
 {
-  setSceneRect(viewport()->geometry());
+  // CRITICAL FIX: Do NOT modify the scene rect!
+  //
+  // The scene is SHARED between the editor (destinationCanvas) and the output window.
+  // Both canvases render the same scene with the same coordinate system.
+  // The scene rect is already set correctly by the editor canvas.
+  //
+  // Changing the scene rect here would break the coordinate system and cause
+  // misalignment between what you see in the editor vs the output window.
+  //
+  // The scene coordinate system is in absolute pixels matching the source dimensions.
+  // Qt's QGraphicsView automatically handles scaling the scene to fit the viewport.
+  //
+  // DO NOTHING HERE - just let the scene use its existing coordinate system.
 }
 
 void OutputGLCanvas::drawForeground(QPainter *painter , const QRectF &rect)

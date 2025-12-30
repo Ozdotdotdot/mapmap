@@ -389,13 +389,25 @@ bool VideoScreenPipeWireImpl::loadMovie(const QString& path)
     return false;
   }
 
-  // Add to pipeline
-  gst_bin_add_many(GST_BIN(_pipeline), _pipewiresrc0, NULL);
-
-  // Link pipewiresrc -> queue
-  if (!gst_element_link_many(_pipewiresrc0, _queue0, NULL))
+  // Create videoflip element to fix mirrored output
+  GstElement *videoflip = gst_element_factory_make("videoflip", "videoflip0");
+  if (!videoflip)
   {
-    qWarning() << "Could not link pipewiresrc to queue.";
+    qWarning() << "videoflip element not available.";
+    unloadMovie();
+    return false;
+  }
+
+  // Set flip method to horizontal flip (method=4)
+  g_object_set(videoflip, "method", 4, NULL);
+
+  // Add to pipeline
+  gst_bin_add_many(GST_BIN(_pipeline), _pipewiresrc0, videoflip, NULL);
+
+  // Link pipewiresrc -> videoflip -> queue
+  if (!gst_element_link_many(_pipewiresrc0, videoflip, _queue0, NULL))
+  {
+    qWarning() << "Could not link pipewiresrc to videoflip to queue.";
     unloadMovie();
     return false;
   }

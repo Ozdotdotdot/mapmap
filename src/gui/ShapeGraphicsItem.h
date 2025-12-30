@@ -31,6 +31,8 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <QHash>
+#include <QOpenGLContext>
 
 #include "Shapes.h"
 
@@ -191,12 +193,20 @@ protected:
 	QSharedPointer<Texture> _getTexture();
 
 private:
-  // Track allocated texture dimensions to avoid reallocating on every frame
-  int _allocatedTextureWidth;
-  int _allocatedTextureHeight;
+  struct TextureContextState {
+    TextureContextState() : textureId(0), allocatedWidth(0), allocatedHeight(0) {}
+    GLuint textureId;
+    int allocatedWidth;
+    int allocatedHeight;
+  };
+
+  TextureContextState& _stateForCurrentContext();
 
   // Buffer to hold a copy of texture data (prevents race condition with GStreamer)
   QByteArray _textureDataCopy;
+
+  // Track GL texture state per context (editor vs output window).
+  QHash<QOpenGLContext*, TextureContextState> _contextStates;
 };
 
 /// Graphics item for textured polygons (eg. triangles).

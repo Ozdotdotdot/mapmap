@@ -79,43 +79,48 @@ int map_int(int value, int istart, int istop, int ostart, int ostop)
 
 Mesh* createMeshForTexture(Texture* texture, int frameWidth, int frameHeight)
 {
-  Q_UNUSED(frameHeight);
-  Q_UNUSED(frameWidth);
+  // Use texture dimensions if available (> 0), otherwise fall back to frame dimensions
+  // This is important for live sources (PipeWire, webcams) where texture dimensions
+  // may not be available at the time the mesh is created
+  int width = (texture->getWidth() > 0) ? texture->getWidth() : frameWidth;
+  int height = (texture->getHeight() > 0) ? texture->getHeight() : frameHeight;
 
   return new Mesh(
     QPointF(texture->getX(), texture->getY()),
-    QPointF(texture->getX() + texture->getWidth(), texture->getY()),
-    QPointF(texture->getX() + texture->getWidth(), texture->getY() + texture->getHeight()),
-    QPointF(texture->getX(), texture->getY() + texture->getHeight())
+    QPointF(texture->getX() + width, texture->getY()),
+    QPointF(texture->getX() + width, texture->getY() + height),
+    QPointF(texture->getX(), texture->getY() + height)
   );
 }
 
 Triangle* createTriangleForTexture(Texture* texture, int frameWidth, int frameHeight)
 {
-  Q_UNUSED(frameHeight);
-  Q_UNUSED(frameWidth);
+  // Use texture dimensions if available (> 0), otherwise fall back to frame dimensions
+  int width = (texture->getWidth() > 0) ? texture->getWidth() : frameWidth;
+  int height = (texture->getHeight() > 0) ? texture->getHeight() : frameHeight;
 
   return new Triangle(
-    QPointF(texture->getX(), texture->getY() + texture->getHeight()),
-    QPointF(texture->getX() + texture->getWidth(), texture->getY() + texture->getHeight()),
-    QPointF(texture->getX() + texture->getWidth() / 2, texture->getY())
+    QPointF(texture->getX(), texture->getY() + height),
+    QPointF(texture->getX() + width, texture->getY() + height),
+    QPointF(texture->getX() + width / 2, texture->getY())
   );
 }
 
 Ellipse* createEllipseForTexture(Texture* texture, int frameWidth,
     int frameHeight)
 {
-  Q_UNUSED(frameHeight);
-  Q_UNUSED(frameWidth);
+  // Use texture dimensions if available (> 0), otherwise fall back to frame dimensions
+  int width = (texture->getWidth() > 0) ? texture->getWidth() : frameWidth;
+  int height = (texture->getHeight() > 0) ? texture->getHeight() : frameHeight;
 
-  qreal halfWidth  = texture->getWidth() / 2;
-  qreal halfHeight = texture->getHeight() / 2;
+  qreal halfWidth  = width / 2.0;
+  qreal halfHeight = height / 2.0;
 
   return new Ellipse(
     QPointF(texture->getX(), texture->getY() + halfHeight),
     QPointF(texture->getX() + halfWidth, texture->getY()),
-    QPointF(texture->getX() + texture->getWidth(), texture->getY() + halfHeight),
-    QPointF(texture->getX() + halfWidth, texture->getY() + texture->getHeight()),
+    QPointF(texture->getX() + width, texture->getY() + halfHeight),
+    QPointF(texture->getX() + halfWidth, texture->getY() + height),
     true
   );
 }

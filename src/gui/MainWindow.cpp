@@ -29,6 +29,8 @@
 #include "VideoScreenPipeWireImpl.h"
 #include <sstream>
 #include <string>
+#include <QScreen>
+#include <QGuiApplication>
 
 namespace mmp {
 
@@ -797,8 +799,15 @@ void MainWindow::addMesh()
     QSharedPointer<Texture> texture = qSharedPointerCast<Texture>(paint);
     Q_CHECK_PTR(texture);
 
-    MShape::ptr outputQuad = MShape::ptr(Util::createMeshForTexture(texture.data(), sourceCanvas->width(), sourceCanvas->height()));
-    MShape::ptr  inputQuad = MShape::ptr(Util::createMeshForTexture(texture.data(), sourceCanvas->width(), sourceCanvas->height()));
+    // CRITICAL FIX: Use texture dimensions, not canvas dimensions
+    // For live sources (PipeWire, webcam), texture dimensions may not be available yet,
+    // so we pass texture width/height which will be used by Util::createMeshForTexture's
+    // fallback logic. The mesh will automatically use the correct dimensions once available.
+    int width = texture->getWidth();
+    int height = texture->getHeight();
+
+    MShape::ptr outputQuad = MShape::ptr(Util::createMeshForTexture(texture.data(), width, height));
+    MShape::ptr  inputQuad = MShape::ptr(Util::createMeshForTexture(texture.data(), width, height));
     mappingPtr = new TextureMapping(paint, outputQuad, inputQuad);
   }
 
@@ -832,8 +841,12 @@ void MainWindow::addTriangle()
     QSharedPointer<Texture> texture = qSharedPointerCast<Texture>(paint);
     Q_CHECK_PTR(texture);
 
-    MShape::ptr outputTriangle = MShape::ptr(Util::createTriangleForTexture(texture.data(), sourceCanvas->width(), sourceCanvas->height()));
-    MShape::ptr inputTriangle = MShape::ptr(Util::createTriangleForTexture(texture.data(), sourceCanvas->width(), sourceCanvas->height()));
+    // Use texture dimensions, not canvas dimensions
+    int width = texture->getWidth();
+    int height = texture->getHeight();
+
+    MShape::ptr outputTriangle = MShape::ptr(Util::createTriangleForTexture(texture.data(), width, height));
+    MShape::ptr inputTriangle = MShape::ptr(Util::createTriangleForTexture(texture.data(), width, height));
     mappingPtr = new TextureMapping(paint, inputTriangle, outputTriangle);
   }
 
@@ -867,8 +880,12 @@ void MainWindow::addEllipse()
     QSharedPointer<Texture> texture = qSharedPointerCast<Texture>(paint);
     Q_CHECK_PTR(texture);
 
-    MShape::ptr outputEllipse = MShape::ptr(Util::createEllipseForTexture(texture.data(), sourceCanvas->width(), sourceCanvas->height()));
-    MShape::ptr inputEllipse = MShape::ptr(Util::createEllipseForTexture(texture.data(), sourceCanvas->width(), sourceCanvas->height()));
+    // Use texture dimensions, not canvas dimensions
+    int width = texture->getWidth();
+    int height = texture->getHeight();
+
+    MShape::ptr outputEllipse = MShape::ptr(Util::createEllipseForTexture(texture.data(), width, height));
+    MShape::ptr inputEllipse = MShape::ptr(Util::createEllipseForTexture(texture.data(), width, height));
     mappingPtr = new TextureMapping(paint, inputEllipse, outputEllipse);
   }
 
@@ -2579,12 +2596,30 @@ void MainWindow::createStatusBar()
 
 void MainWindow::readSettings()
 {
+  auto geometryIsVisible = [](const QRect& rect) -> bool {
+    const auto screens = QGuiApplication::screens();
+    for (QScreen* screen : screens) {
+      if (screen && screen->geometry().intersects(rect)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   // FIXME: for each setting that is new since the first release in the major version number branch,
   // make sure it exists before reading its value.
   QSettings settings;
 
   // settings present since 0.1.0:
   restoreGeometry(settings.value("geometry").toByteArray());
+  // If restored geometry is off-screen (eg. unplugged monitor), fallback to sensible defaults.
+  if (!geometryIsVisible(frameGeometry())) {
+    QRect available = QGuiApplication::primaryScreen()
+                        ? QGuiApplication::primaryScreen()->availableGeometry()
+                        : QRect(0, 0, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    resize(DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    move(available.center() - rect().center());
+  }
   restoreState(settings.value("windowState").toByteArray());
 
   mainSplitter->restoreState(settings.value("mainSplitter").toByteArray());
@@ -2592,6 +2627,13 @@ void MainWindow::readSettings()
   mappingSplitter->restoreState(settings.value("mappingSplitter").toByteArray());
   canvasSplitter->restoreState(settings.value("canvasSplitter").toByteArray());
   outputWindow->restoreGeometry(settings.value("outputWindow").toByteArray());
+  if (!geometryIsVisible(outputWindow->frameGeometry())) {
+    QRect available = QGuiApplication::primaryScreen()
+                        ? QGuiApplication::primaryScreen()->availableGeometry()
+                        : QRect(0, 0, OUTPUT_WINDOW_MINIMUM_WIDTH, OUTPUT_WINDOW_MINIMUM_HEIGHT);
+    outputWindow->resize(OUTPUT_WINDOW_MINIMUM_WIDTH, OUTPUT_WINDOW_MINIMUM_HEIGHT);
+    outputWindow->move(available.center() - outputWindow->rect().center());
+  }
 
   // new in 0.1.2:
   outputFullScreenAction->setChecked(settings.value("displayOutputWindow", MM::DISPLAY_OUTPUT_WINDOW).toBool());

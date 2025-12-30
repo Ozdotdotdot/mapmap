@@ -230,28 +230,52 @@ void VideoScreenPipeWireImpl::onPortalResponse(uint response, const QVariantMap&
   if (_waitingForStart && results.contains("streams")) {
     qDebug() << "This is the Start response - parsing streams for node ID";
 
-    QVariantList streams = results["streams"].toList();
+    QVariant streamsVariant = results["streams"];
+    qDebug() << "Streams variant type:" << streamsVariant.typeName();
 
-    if (streams.isEmpty()) {
-      qWarning() << "No streams available in portal response";
-      if (_eventLoop && _eventLoop->isRunning()) {
-        _eventLoop->quit();
+    // The streams field is a D-Bus array of structs: a(ua{sv})
+    // Format: [(node_id: uint, properties: dict), ...]
+    // We need to parse it as a QDBusArgument
+
+    if (streamsVariant.canConvert<QDBusArgument>()) {
+      qDebug() << "Parsing streams as QDBusArgument (D-Bus a(ua{sv}) format)";
+
+      const QDBusArgument argument = streamsVariant.value<QDBusArgument>();
+
+      // Begin array iteration
+      argument.beginArray();
+
+      while (!argument.atEnd()) {
+        // Begin struct iteration - each stream is (node_id, properties)
+        argument.beginStructure();
+
+        // First element: node_id (uint)
+        uint nodeId;
+        argument >> nodeId;
+
+        // Second element: properties (a{sv} - dict of string to variant)
+        QVariantMap properties;
+        argument >> properties;
+
+        argument.endStructure();
+
+        qDebug() << "Found stream - node_id:" << nodeId << "properties:" << properties.keys();
+
+        // Use the first stream's node ID
+        if (_pipeWireNodeId == 0) {
+          _pipeWireNodeId = nodeId;
+          qDebug() << "Successfully extracted PipeWire node ID:" << _pipeWireNodeId;
+        }
       }
-      return;
-    }
 
-    // Get the first stream (we only requested one source)
-    QVariantMap stream = streams[0].toMap();
+      argument.endArray();
 
-    qDebug() << "Stream keys:" << stream.keys();
+      if (_pipeWireNodeId == 0) {
+        qWarning() << "No streams found in D-Bus array";
+      }
 
-    // Extract the PipeWire node ID
-    if (stream.contains("node_id")) {
-      _pipeWireNodeId = stream["node_id"].toUInt();
-      qDebug() << "Successfully extracted PipeWire node ID:" << _pipeWireNodeId;
     } else {
-      qWarning() << "Stream missing node_id field";
-      qWarning() << "Available fields:" << stream.keys();
+      qWarning() << "Streams is not a QDBusArgument - unexpected type:" << streamsVariant.typeName();
     }
   }
 

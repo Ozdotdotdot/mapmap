@@ -52,11 +52,8 @@ ShortcutWindow::ShortcutWindow()
 
   htmlContent.append("</body></html>");
 
-  // Set up web page
-  QWebEnginePage *shortcutWebPage = new QWebEnginePage;
-  shortcutWebPage->setHtml(htmlContent);
-  // Set main page
-  setPage(shortcutWebPage);
+  // Set HTML content directly (QTextBrowser has native HTML/CSS support)
+  setHtml(htmlContent);
 
   // Disable context menu
   setContextMenuPolicy(Qt::NoContextMenu);
@@ -65,10 +62,12 @@ ShortcutWindow::ShortcutWindow()
   int sansSerif = QFontDatabase::addApplicationFont(":/base-font");
   int serif = QFontDatabase::addApplicationFont(":/console-font");
   QFont sansSerifFont(QFont(QFontDatabase::applicationFontFamilies(sansSerif).at(0), 11, QFont::Normal));
-  QFont serifFont(QFont(QFontDatabase::applicationFontFamilies(serif).at(0), 10, QFont::Normal));
-  // Apply font to the document
-  settings()->setFontFamily(QWebEngineSettings::SansSerifFont, sansSerifFont.family());
-  settings()->setFontFamily(QWebEngineSettings::SerifFont, serifFont.family());
+  // Apply font to the document (QTextBrowser uses document()->setDefaultFont())
+  document()->setDefaultFont(sansSerifFont);
+
+  // Enable rich text support for HTML/CSS rendering
+  setOpenExternalLinks(false);
+  setReadOnly(true);
 
 }
 

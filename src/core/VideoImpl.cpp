@@ -120,9 +120,6 @@ VideoImpl::~VideoImpl()
 {
   // Free all resources.
   freeResources();
-
-  // Free mutex locker object.
-  delete _mutexLocker;
 }
 
 bool VideoImpl::_eos() const
@@ -225,8 +222,6 @@ _movieReady(false),
 _playState(false),
 _uri("")
 {
-  _mutexLocker = new QMutexLocker(&_mutex);
-
   QSettings settings;
   _playInLoop = settings.value("playInLoop", MM::PLAY_IN_LOOP).toBool();
 }
@@ -782,12 +777,12 @@ void VideoImpl::_freeElement(GstElement** element)
 
 void VideoImpl::lockMutex()
 {
-  _mutexLocker->relock();
+  _mutex.lock();
 }
 
 void VideoImpl::unlockMutex()
 {
-  _mutexLocker->unlock();
+  _mutex.unlock();
 }
 
 bool VideoImpl::waitForNextBits(int timeout, const uchar** bits)

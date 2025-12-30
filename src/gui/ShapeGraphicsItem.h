@@ -189,6 +189,14 @@ protected:
   QWeakPointer<MShape> _inputShape;
 
 	QSharedPointer<Texture> _getTexture();
+
+private:
+  // Track allocated texture dimensions to avoid reallocating on every frame
+  int _allocatedTextureWidth;
+  int _allocatedTextureHeight;
+
+  // Buffer to hold a copy of texture data (prevents race condition with GStreamer)
+  QByteArray _textureDataCopy;
 };
 
 /// Graphics item for textured polygons (eg. triangles).

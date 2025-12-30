@@ -204,7 +204,9 @@ void EllipseColorGraphicsItem::_doPaint(QPainter* painter,
 }
 
 TextureGraphicsItem::TextureGraphicsItem(Mapping::ptr mapping, bool output)
-  : ShapeGraphicsItem(mapping, output)
+  : ShapeGraphicsItem(mapping, output),
+    _allocatedTextureWidth(0),
+    _allocatedTextureHeight(0)
 {
   _textureMapping = qSharedPointerCast<TextureMapping>(mapping);
   Q_CHECK_PTR(_textureMapping);
@@ -275,20 +277,69 @@ void TextureGraphicsItem::_prePaint(QPainter* painter,
   glBindTexture(GL_TEXTURE_2D, texture->getTextureId());
 
   // Copy bits to texture iff necessary.
+  // Strategy: Copy data while holding mutex, then upload after releasing mutex
+  // This prevents race condition where GStreamer frees buffer during GPU upload
+  int width = 0, height = 0;
+  bool needsUpload = false;
+
   texture->lockMutex();
   if (texture->bitsHaveChanged())
   {
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                 texture->getWidth(), texture->getHeight(), 0, GL_RGBA,
-                 GL_UNSIGNED_BYTE, texture->getBits());
-    // NOTE: We would gain in efficiency if we were able to just update the texture using glTexSubImage2D
-    // See: http://stackoverflow.com/questions/11217121/how-to-manage-memory-with-texture-in-opengl
-//    glTexSubImage2D(GL_TEXTURE_2D,
-//        0, 0,
-//        texture->getWidth(), texture->getHeight(), 0,
-//        GL_RGBA, GL_UNSIGNED_BYTE, texture->getBits());
+    width = texture->getWidth();
+    height = texture->getHeight();
+
+    // Only process if we have valid dimensions
+    if (width > 0 && height > 0)
+    {
+      // Get bits pointer - MUST be called after checking dimensions
+      // and MUST copy data before unlocking mutex
+      const uchar* bits = texture->getBits();
+
+      // Triple-check pointer is valid before attempting memcpy
+      // (prevents crash if GStreamer freed the buffer)
+      if (bits != NULL)
+      {
+        // Calculate buffer size (RGBA = 4 bytes per pixel)
+        int bufferSize = width * height * 4;
+
+        // Resize our buffer if needed
+        _textureDataCopy.resize(bufferSize);
+
+        // CRITICAL: Copy data while STILL HOLDING THE LOCK
+        // This prevents GStreamer from freeing the buffer mid-copy
+        memcpy(_textureDataCopy.data(), bits, bufferSize);
+
+        needsUpload = true;
+      }
+    }
   }
   texture->unlockMutex();
+
+  // Now upload the copied data (GStreamer mutex is released, safe to take time)
+  if (needsUpload)
+  {
+    const uchar* dataToCopy = reinterpret_cast<const uchar*>(_textureDataCopy.constData());
+
+    // Check if texture dimensions have changed - if so, reallocate with glTexImage2D
+    if (width != _allocatedTextureWidth || height != _allocatedTextureHeight)
+    {
+      // Allocate new texture memory (first time or dimension change)
+      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                   width, height, 0, GL_RGBA,
+                   GL_UNSIGNED_BYTE, dataToCopy);
+
+      // Remember allocated dimensions
+      _allocatedTextureWidth = width;
+      _allocatedTextureHeight = height;
+    }
+    else
+    {
+      // Dimensions unchanged - just update texture data (much more efficient)
+      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0,
+                      width, height,
+                      GL_RGBA, GL_UNSIGNED_BYTE, dataToCopy);
+    }
+  }
 
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);

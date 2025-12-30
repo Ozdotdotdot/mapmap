@@ -264,9 +264,6 @@ protected:
   /// Main mutex.
   QMutex _mutex;
 
-  /// Main mutex locker (for the lockMutex() / unlockMutex() methods).
-  QMutexLocker* _mutexLocker;
-
 private:
   /**
    * Path of the movie file being played.

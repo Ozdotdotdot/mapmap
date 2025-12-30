@@ -213,11 +213,12 @@ The build has been tested with:
 - ✅ PipeWire 0.3+
 - ✅ Linux kernel 6.18+
 
-All components compile successfully with:
+All components compile and run successfully with:
 - ✅ No X11 hard dependency
 - ✅ PipeWire support enabled
 - ✅ Modern QOpenGLWidget rendering
 - ✅ Wayland-native operation
+- ✅ Application starts and runs on both X11 and Wayland
 
 ## Future Work
 

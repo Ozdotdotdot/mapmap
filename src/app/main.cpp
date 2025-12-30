@@ -172,20 +172,23 @@ int main(int argc, char *argv[])
 
 #endif // USING_QT_5
 
-  // Check for OpenGL support using modern Qt OpenGL API (Wayland-compatible)
-  if (!QOpenGLContext::openGLModuleType())
-  {
-    qFatal("This system has no OpenGL support.");
-    return 1;
-  }
-
-  // Set default OpenGL surface format for best compatibility
+  // Set default OpenGL surface format for best compatibility (before any OpenGL usage)
   QSurfaceFormat format;
   format.setDepthBufferSize(24);
   format.setStencilBufferSize(8);
   format.setVersion(2, 0);  // OpenGL 2.0 minimum
   format.setProfile(QSurfaceFormat::CompatibilityProfile);
   QSurfaceFormat::setDefaultFormat(format);
+
+  // Check for OpenGL support using modern Qt OpenGL API (Wayland-compatible)
+  // Note: openGLModuleType() returns LibGL (0) or LibGLES (1), both are valid
+  // We just want to ensure OpenGL is available, which Qt handles automatically
+  QOpenGLContext testContext;
+  if (!testContext.create())
+  {
+    qFatal("This system has no OpenGL support. Please install OpenGL drivers.");
+    return 1;
+  }
 
   // Create splash screen.
   QPixmap pixmap(":/mapmap-splash");

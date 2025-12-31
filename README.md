@@ -1,81 +1,40 @@
-MapMap
-====== 
+MapMap (Personal Fork)
+======================
 
-:warning: **Unfortunately, we are no longer able to maintain nor provide support for MapMap anymore. The code is provided "as is".**
+This repository is an active rewrite of MapMap that I use to power the projector that doubles as my living-room TV. The original MapMap project was archived by its creators about five years ago, so this fork is opinionated, experimental, and tailored to my own setup rather than a general-purpose release.
 
-MapMap is a free video mapping software.
+## Why This Exists
 
-Projection mapping, also known as video mapping and spatial augmented
-reality, is a projection technology used to turn objects, often
-irregularly shaped, into a display surface for video projection.
-These objects may be complex industrial landscapes, such as buildings.
-By using specialized software, a two or three dimensional object is
-spatially mapped on the virtual program which mimics the real
-environment it is to be projected on. The software can interact with a
-projector to fit any desired image onto the surface of that object.
-This technique is used by artists and advertisers alike who can add
-extra dimensions, optical illusions, and notions of movement onto
-previously static objects. The video is commonly combined with, or
-triggered by, audio to create an audio-visual narrative.
+I wanted to fill an entire wall with a mix of a standard “TV” region, shader-driven visuals, and reactive audio content. Existing projection-mapping tools on Linux fell short—none of them could simply capture and map an arbitrary screen or application window straight into a composition. That feature is now built into this fork and forms the foundation for everything else I plan to layer on top.
 
+## Current Highlights
 
-Build status
----------------
+- **Wayland-native screen/application sharing.** Capture any monitor or window and map it without having to route through XWayland. Developed and tested on Arch Linux running COSMIC.
+- **Designed for immersive projection setups.** The workflow assumes a projector-as-TV scenario and emphasizes mapping across an entire room instead of a single rectangular canvas.
+- **Actively hacked-on foundation.** The codebase is mid-refactor, with large sections kept only because they power my daily use.
 
-Github Actions: ![Build on macOS](https://github.com/mapmapteam/mapmap/workflows/Build%20on%20macOS/badge.svg) ![Build on Ubuntu](https://github.com/mapmapteam/mapmap/workflows/Build%20on%20Ubuntu/badge.svg) ![Build on Windows](https://github.com/mapmapteam/mapmap/workflows/Build%20on%20Windows/badge.svg)
+## Roadmap
 
-Travis CI: [![Build on Linux and macOS](https://travis-ci.org/mapmapteam/mapmap.svg?branch=develop)](https://travis-ci.org/mapmapteam/mapmap) [![Build on Windows](https://ci.appveyor.com/api/projects/status/5b2ww0n8m8s9p55c?svg=true)](https://ci.appveyor.com/project/baydam/mapmap)
+1. Integrated audio visualizer that can be placed alongside the TV region.
+2. Small shader library (GLSL) for ambient fills and transitions.
+3. General polish once the above features feel solid enough for regular use.
 
-Ackowledgements
----------------
-This project was made possible by the support of the International
-Organization of La Francophonie.
-http://www.francophonie.org/
+There is no guarantee that any of these land in a way that is broadly useful, but they guide the direction of the work.
 
-Ce projet a été rendu possible grâce au support de l'Organisation
-internationale de la Francophonie.
-http://www.francophonie.org/
+## Caveats & Expectations
 
-Build and installation
-----------------------
-To build and install it, see the INSTALL file provided with the source code.
+- **Not production-ready.** Crashes, regressions, and half-implemented ideas are part of the experience. Treat every build as a prototype.
+- **Support is limited to “whatever works on my machine.”** I test on Arch Linux under Wayland with COSMIC; other environments may require digging into the code.
+- **Documentation is lagging.** This README is the canonical source of truth until the code stabilizes enough to justify deeper docs.
 
-To use this software on Mac OS X:
-* Install GStreamer using http://gstreamer.freedesktop.org/data/pkg/osx/1.2.4.1/gstreamer-1.0-1.2.4.1-universal.pkg : you should customize the installation and choose to install all components.
+## Building & Running
 
-To use this software on Gnu/Linux with window managers other than Unity, 
-make sure that this package is NOT installed: appmenu-qt5
-or else the menu will not show.
+The historical build instructions still apply. See `INSTALL.md` for dependency details, platform notes, and build commands. If you run into Wayland-specific snags, look at `WAYLAND_MIGRATION.md` for background on how the new capture pipeline is structured.
 
-Authors
--------
-* Sofian Audry: lead developer, user interface designer, project manager.
-* Dame Diongue: developer.
-* Alexandre Quessy: release manager, developer, technical writer, project manager.
-* Mike Latona: user interface designer.
-* Vasilis Liaskovitis: developer.
+## Contributing
 
-Contributors
-------------
-* Lucas Adair : developer, macOS packaging.
-* Christian Ambaud: sponsor, inspiration.
-* Alex Barry: user experience design.
-* Eliza Bennett : documentation, chinese translation.
-* Jonathan Roman Bland : developer.
-* Sylvain Cormier: developer.
-* Maxime Damecour: inspiration.
-* Louis Desjardins: project manager.
-* Ian Donnelly : user interface designer, documentation.
-* Gene Felice : video package, documentation.
-* Julien Keable: developer.
-* Marc Lavallée: help with packaging.
-* Matthew Loewens : documentation, developer.
-* Madison Suniga : documentation.
+Pull requests are welcome if they align with the projector + shader + audio vision described above. If you have fixes for crashers, Wayland glitches, or general UX improvements, feel free to open an issue or draft PR so we can figure out how it fits.
 
-More info
----------
-Get more info from http://mapmap.info
+## License
 
-Licence
----------
-[GNU GPL v3](https://github.com/mapmapteam/mapmap/blob/develop/LICENSE)
+MapMap remains released under the [GNU GPL v3](LICENSE).

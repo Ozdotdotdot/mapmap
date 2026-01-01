@@ -32,8 +32,7 @@ sudo apt-get install -y \
       qtmultimedia5-dev \
       libqt5opengl5-dev \
       qtwebengine5-dev \
-      libqt5multimedia5-plugins \
-      qt5-default
+      libqt5multimedia5-plugins
 ```
 
 Install GStreamer 1.0 libraries and plugins:

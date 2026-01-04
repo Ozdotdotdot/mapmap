@@ -178,6 +178,9 @@ int main(int argc, char *argv[])
   format.setStencilBufferSize(8);
   format.setVersion(2, 0);  // OpenGL 2.0 minimum
   format.setProfile(QSurfaceFormat::CompatibilityProfile);
+  // Sync swaps to the display to keep a steady frame cadence (usually 60hz).
+  // If drivers ignore this, Qt falls back gracefully.
+  format.setSwapInterval(1);
   QSurfaceFormat::setDefaultFormat(format);
 
   // Check for OpenGL support using modern Qt OpenGL API (Wayland-compatible)

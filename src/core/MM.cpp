@@ -61,7 +61,8 @@ const qreal MM::VERTEX_LOCKED_RADIUS = 6;
 const qreal MM::VERTEX_SELECT_STROKE_WIDTH = 1.5;
 
 // Time.
-const qreal MM::DEFAULT_FRAMES_PER_SECOND = 29.97f;
+// Use a 60fps target to keep the UI/output window smooth on modern displays.
+const qreal MM::DEFAULT_FRAMES_PER_SECOND = 60.0f;
 
 // Zoom.
 const qreal MM::ZOOM_FACTOR = 1.4f;

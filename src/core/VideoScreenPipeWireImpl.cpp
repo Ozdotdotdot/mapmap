@@ -142,9 +142,8 @@ bool VideoScreenPipeWireImpl::selectSources()
   qDebug() << "SelectSources request:" << reply.value().path();
   qDebug() << "Expected Response signal on:" << requestPath;
 
-  // Wait for user to select source
+  // Wait for user to select source (no timeout so the portal dialog can remain open)
   _eventLoop = new QEventLoop();
-  QTimer::singleShot(30000, _eventLoop, &QEventLoop::quit);
   _eventLoop->exec();
   delete _eventLoop;
   _eventLoop = NULL;
@@ -357,10 +356,8 @@ bool VideoScreenPipeWireImpl::requestScreenShare()
   }
   qDebug() << "SUCCESS: Stream start initiated";
 
-  // Wait for Start Response
+  // Wait for Start Response (portal might take a while if the user lingers)
   _eventLoop = new QEventLoop();
-  QTimer::singleShot(10000, _eventLoop, &QEventLoop::quit);
-
   qDebug() << "Waiting for Start Response, event loop =" << (void*)_eventLoop;
 
   _eventLoop->exec();

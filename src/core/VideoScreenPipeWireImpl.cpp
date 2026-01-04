@@ -48,7 +48,7 @@ VideoScreenPipeWireImpl::VideoScreenPipeWireImpl() :
   _pipeWireNodeId(0),
   _sessionReady(false),
   _eventLoop(NULL),
-  _waitingForStart(false)
+  _pendingRequestType(PortalRequestType::None)
 {
 }
 
@@ -65,10 +65,19 @@ bool VideoScreenPipeWireImpl::createSession()
   }
 
   QString sessionToken = QString("mapmap_session_%1").arg(QRandomGenerator::global()->generate());
+  QString sender = QDBusConnection::sessionBus().baseService().mid(1).replace('.', '_');
+  QString requestPath = QString("/org/freedesktop/portal/desktop/request/%1/%2")
+                        .arg(sender)
+                        .arg(sessionToken);
 
   QVariantMap options;
   options["handle_token"] = sessionToken;
   options["session_handle_token"] = sessionToken;
+
+  if (!connectToResponseSignal(requestPath, PortalRequestType::CreateSession)) {
+    qWarning() << "Failed to connect to CreateSession Response signal";
+    return false;
+  }
 
   QDBusReply<QDBusObjectPath> reply = iface.call("CreateSession", options);
 
@@ -77,14 +86,20 @@ bool VideoScreenPipeWireImpl::createSession()
     return false;
   }
 
-  // Construct the session handle from the token
-  // Format: /org/freedesktop/portal/desktop/session/SENDER/TOKEN
-  QString sender = QDBusConnection::sessionBus().baseService().mid(1).replace('.', '_');
-  _sessionHandle = QString("/org/freedesktop/portal/desktop/session/%1/%2")
-                   .arg(sender)
-                   .arg(sessionToken);
+  qDebug() << "CreateSession request path:" << reply.value().path();
 
-  qDebug() << "Request path:" << reply.value().path();
+  // Wait for portal response to supply the session handle
+  _eventLoop = new QEventLoop();
+  QTimer::singleShot(30000, _eventLoop, &QEventLoop::quit);
+  _eventLoop->exec();
+  delete _eventLoop;
+  _eventLoop = NULL;
+
+  if (_sessionHandle.isEmpty()) {
+    qWarning() << "CreateSession failed: portal did not provide a session handle";
+    return false;
+  }
+
   qDebug() << "Session handle:" << _sessionHandle;
   return true;
 }
@@ -92,6 +107,7 @@ bool VideoScreenPipeWireImpl::createSession()
 bool VideoScreenPipeWireImpl::selectSources()
 {
   if (_sessionHandle.isEmpty()) return false;
+  _sessionReady = false;
 
   QDBusInterface iface("org.freedesktop.portal.Desktop",
                        "/org/freedesktop/portal/desktop",
@@ -109,7 +125,7 @@ bool VideoScreenPipeWireImpl::selectSources()
   options["multiple"] = false;
 
   // Connect to Response signal BEFORE making the call
-  if (!connectToResponseSignal(requestPath)) {
+  if (!connectToResponseSignal(requestPath, PortalRequestType::SelectSources)) {
     qWarning() << "Failed to connect to Response signal";
     return false;
   }
@@ -154,7 +170,7 @@ bool VideoScreenPipeWireImpl::startStream()
   options["handle_token"] = requestToken;
 
   // Connect to Response signal for Start
-  if (!connectToResponseSignal(requestPath)) {
+  if (!connectToResponseSignal(requestPath, PortalRequestType::StartStream)) {
     qWarning() << "Failed to connect to Start Response signal";
     return false;
   }
@@ -174,9 +190,6 @@ bool VideoScreenPipeWireImpl::startStream()
 
   qDebug() << "Start request succeeded:" << reply.value().path();
 
-  // Set flag so the Response handler knows to call OpenPipeWireRemote
-  _waitingForStart = true;
-
   // The Response signal will arrive asynchronously and the handler will:
   // 1. Call OpenPipeWireRemote
   // 2. Set _pipeWireFd
@@ -187,7 +200,8 @@ bool VideoScreenPipeWireImpl::startStream()
   return true;
 }
 
-bool VideoScreenPipeWireImpl::connectToResponseSignal(const QString& requestPath)
+bool VideoScreenPipeWireImpl::connectToResponseSignal(const QString& requestPath,
+                                                      PortalRequestType type)
 {
   // Connect to the Response signal with proper signature: (uint response, QVariantMap results)
   bool connected = QDBusConnection::sessionBus().connect(
@@ -202,6 +216,8 @@ bool VideoScreenPipeWireImpl::connectToResponseSignal(const QString& requestPath
   if (!connected) {
     qWarning() << "Failed to connect to Response signal at" << requestPath;
     qWarning() << "Last D-Bus error:" << QDBusConnection::sessionBus().lastError().message();
+  } else {
+    _pendingRequestType = type;
   }
 
   return connected;
@@ -210,7 +226,7 @@ bool VideoScreenPipeWireImpl::connectToResponseSignal(const QString& requestPath
 void VideoScreenPipeWireImpl::onPortalResponse(uint response, const QVariantMap& results)
 {
   qDebug() << "Portal Response received - response code:" << response;
-  qDebug() << "  _waitingForStart:" << _waitingForStart;
+  qDebug() << "  Pending request:" << static_cast<int>(_pendingRequestType);
   qDebug() << "  _sessionHandle:" << _sessionHandle;
   qDebug() << "  Results keys:" << results.keys();
 
@@ -223,20 +239,39 @@ void VideoScreenPipeWireImpl::onPortalResponse(uint response, const QVariantMap&
     return;
   }
 
-  // Mark session as ready - for SelectSources this is all we need
-  _sessionReady = true;
+  switch (_pendingRequestType) {
+  case PortalRequestType::CreateSession:
+    if (results.contains("session_handle")) {
+      const QVariant handleVariant = results.value("session_handle");
+      if (handleVariant.canConvert<QDBusObjectPath>()) {
+        _sessionHandle = handleVariant.value<QDBusObjectPath>().path();
+      } else {
+        _sessionHandle = handleVariant.toString();
+      }
+      qDebug() << "Received session handle from portal:" << _sessionHandle;
+    } else {
+      qWarning() << "Portal CreateSession response missing session_handle";
+    }
+    break;
+  case PortalRequestType::SelectSources:
+    _sessionReady = true;
+    qDebug() << "Portal SelectSources succeeded";
+    break;
+  case PortalRequestType::StartStream:
+  {
+    if (!results.contains("streams")) {
+      qWarning() << "Start response missing streams array";
+      break;
+    }
 
-  // If this is the Start response, extract the PipeWire node ID from streams
-  if (_waitingForStart && results.contains("streams")) {
     qDebug() << "This is the Start response - parsing streams for node ID";
 
-    QVariant streamsVariant = results["streams"];
+    QVariant streamsVariant = results.value("streams");
     qDebug() << "Streams variant type:" << streamsVariant.typeName();
 
     // The streams field is a D-Bus array of structs: a(ua{sv})
     // Format: [(node_id: uint, properties: dict), ...]
     // We need to parse it as a QDBusArgument
-
     if (streamsVariant.canConvert<QDBusArgument>()) {
       qDebug() << "Parsing streams as QDBusArgument (D-Bus a(ua{sv}) format)";
 
@@ -277,8 +312,16 @@ void VideoScreenPipeWireImpl::onPortalResponse(uint response, const QVariantMap&
     } else {
       qWarning() << "Streams is not a QDBusArgument - unexpected type:" << streamsVariant.typeName();
     }
+    break;
+  }
+  case PortalRequestType::None:
+  default:
+    qWarning() << "Portal response received with no pending request context";
+    break;
   }
 
+  // Reset pending request
+  _pendingRequestType = PortalRequestType::None;
   qDebug() << "Checking event loop: _eventLoop =" << (void*)_eventLoop
            << "isRunning =" << (_eventLoop ? _eventLoop->isRunning() : false);
 

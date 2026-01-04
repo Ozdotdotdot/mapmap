@@ -57,7 +57,6 @@ private:
   uint _pipeWireNodeId;  // PipeWire node ID from portal streams
   bool _sessionReady;
   QEventLoop *_eventLoop;
-  bool _waitingForStart;  // Track if we're waiting for Start response
 
   // Portal helpers
   bool createSession();
@@ -65,7 +64,14 @@ private:
   bool startStream();
 
   // D-Bus signal connection
-  bool connectToResponseSignal(const QString& requestPath);
+  enum class PortalRequestType {
+    None,
+    CreateSession,
+    SelectSources,
+    StartStream
+  };
+  bool connectToResponseSignal(const QString& requestPath, PortalRequestType type);
+  PortalRequestType _pendingRequestType;
 
   // State tracking for async flow
   enum class PortalState {

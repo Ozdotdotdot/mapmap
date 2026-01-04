@@ -1,4 +1,4 @@
-MapMap (Personal Fork)
+Waymap (Personal Fork)
 ======================
 
 This repository is an active rewrite of MapMap that I use to power the projector that doubles as my living-room TV. The original MapMap project was archived by its creators about five years ago, so this fork is opinionated, experimental, and tailored to my own setup rather than a general-purpose release.

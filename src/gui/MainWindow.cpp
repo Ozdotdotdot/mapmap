@@ -98,6 +98,7 @@ MainWindow::MainWindow()
 
   // Create and start timer.
   videoTimer = new QTimer(this);
+  videoTimer->setTimerType(Qt::PreciseTimer);
   connect(videoTimer, SIGNAL(timeout()), this, SLOT(processFrame()));
   setFramesPerSecond(MM::DEFAULT_FRAMES_PER_SECOND);
   videoTimer->start();
